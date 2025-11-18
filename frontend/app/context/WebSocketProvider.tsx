@@ -1,74 +1,45 @@
+// context/WebSocketProvider.tsx
 'use client';
 
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { createContext, useContext, useEffect } from 'react';
 import { useTaskStore } from '../store/taskStore';
-import toast from 'react-hot-toast';
 
-const WebSocketContext = createContext<WebSocket | null>(null);
+const WebSocketContext = createContext<{ isConnected: boolean }>({ 
+  isConnected: false 
+});
 
-export const useWebSocket = () => {
+export const useWebSocketContext = () => {
   return useContext(WebSocketContext);
 };
 
-export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
-  const wsRef = useRef<WebSocket | null>(null);
-  const handleUpdate = useTaskStore(
-    (state) => state._handleWebSocketUpdate
-  );
+export const WebSocketProvider = ({ 
+  children 
+}: { 
+  children: React.ReactNode 
+}) => {
+  const _ws = useWebSocket() as any;
+  const wsRef = _ws?.wsRef ?? ({ current: null } as React.MutableRefObject<WebSocket | null>);
+  const { wsConnected } = useTaskStore();
 
+  // Optional: Send periodic health checks
   useEffect(() => {
-    // Connect to the WebSocket server
-    const ws = new WebSocket(
-      process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000'
-    );
-    wsRef.current = ws;
+    if (!wsConnected || !wsRef.current) return;
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      toast.success('Real-time connection established.');
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        
-        // Listen for the specific message type from the backend
-        if (message.type === 'task-status-update') {
-          const { taskId, status, error } = message.payload;
-          
-          // Update the Zustand store
-          handleUpdate({ taskId, status, error });
-
-          // Show toasts
-          if (status === 'success') {
-            toast.success(`Task ${taskId.split('-')[0]} completed.`);
-          } else if (status === 'error') {
-            toast.error(`Task failed: ${error}`);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+    const interval = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ 
+          type: 'health-check',
+          timestamp: Date.now()
+        }));
       }
-    };
+    }, 30000); // Every 30 seconds
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      toast.error('Real-time connection lost.');
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      toast.error('Real-time connection error.');
-    };
-
-    // Cleanup on unmount
-    return () => {
-      ws.close();
-    };
-  }, [handleUpdate]);
+    return () => clearInterval(interval);
+  }, [wsConnected, wsRef]);
 
   return (
-    <WebSocketContext.Provider value={wsRef.current}>
+    <WebSocketContext.Provider value={{ isConnected: wsConnected }}>
       {children}
     </WebSocketContext.Provider>
   );

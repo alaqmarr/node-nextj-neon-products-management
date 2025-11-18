@@ -95,9 +95,10 @@ echo [INFO] Frontend dir: %CD%
 :: Start frontend with error handling
 echo [INFO] Installing dependencies...
 cmd /c "npm install" >nul 2>&1
+cmd /c "npm run build" >nul 2>&1
 
 echo [INFO] Starting frontend server...
-start "FRONTEND SERVER" /B cmd /k "cd /d "%CD%" && echo === FRONTEND SERVER === && echo Directory: %CD% && npm run dev"
+start "FRONTEND SERVER" /B cmd /k "cd /d "%CD%" && echo === FRONTEND SERVER === && echo Directory: %CD% && npm run start"
 cd ..
 
 echo.
