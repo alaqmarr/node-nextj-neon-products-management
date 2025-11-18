@@ -1,144 +1,136 @@
 @echo off
 setlocal enabledelayedexpansion
 
+title Application Launcher - DO NOT CLOSE
+
+echo ========================================
+echo    Product Management System Launcher
+echo ========================================
+echo.
+
 :: Check for admin rights
+echo [1/8] Checking administrator privileges...
 NET SESSION >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 (
-    echo Requesting administrator privileges...
+    echo [ERROR] Need administrator rights. Requesting elevation...
     PowerShell -Command "Start-Process -Verb RunAs -FilePath '%~f0'"
-    exit /b
+    goto never_exit
 )
 
-:: Change to the directory where the batch file is located
+:: Force stay in current directory
 cd /d "%~dp0"
-
-echo ========================================
-echo    Product Management System
-echo    Repository: https://github.com/alaqmarr/node-nextj-neon-products-management.git
-echo ========================================
+echo [2/8] Current directory: %CD%
 echo.
 
-echo === GitHub Auto-Update Check ===
-
-:: Check if git is available
-git --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Git not found. Skipping update check.
-    goto start_app
-)
-
-:: Check if this is a git repository
-if not exist ".git" (
-    echo Not a git repository. Skipping update check.
-    goto start_app
-)
-
-:: Get current branch
-for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set "current_branch=%%i"
-if "!current_branch!"=="" set "current_branch=main"
-
-echo Current branch: !current_branch!
-
-:: Fetch updates
-echo Fetching latest changes from GitHub...
-git fetch origin !current_branch! >nul 2>&1
-
-:: Check for updates
-git rev-list --count HEAD..origin/!current_branch! >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=*" %%i in ('git rev-list --count HEAD..origin/!current_branch!') do set "commit_count=%%i"
-    
-    if !commit_count! gtr 0 (
-        echo.
-        echo !!! There are !commit_count! new commit(s) available on GitHub!
-        echo.
-        choice /c yn /m "Do you want to update now (y/n)"
-        if !errorlevel! equ 1 (
-            echo Pulling latest changes...
-            git pull origin !current_branch!
-            if !errorlevel! equ 0 (
-                echo [SUCCESS] Successfully updated to latest version!
-            ) else (
-                echo [ERROR] Failed to pull updates. Continuing with current version.
-            )
-        ) else (
-            echo Continuing with current version...
-        )
-    ) else (
-        echo [OK] Already up to date with GitHub
-    )
-) else (
-    echo [INFO] Could not check for updates. Continuing with current version.
-)
-
-:start_app
-echo.
-echo === Starting Application ===
-
-:: Backend setup
-echo.
-echo --- Setting up Backend ---
-if exist backend (
-    cd backend
-    echo Current directory: %CD%
-    echo Installing backend dependencies...
-    call npm install
-    if exist prisma (
-        echo Running database migrations...
-        call npx prisma generate
-        call npx prisma db push
-    )
-    echo Starting backend server...
-    start "Backend Server" cmd /k "npm run dev"
-    cd ..
-) else (
+:: Check folder structure
+echo [3/8] Checking project structure...
+if not exist "backend" (
     echo [ERROR] Backend folder not found!
-    goto error_handling
+    echo [INFO] Please place this file in project root with backend/ and frontend/ folders
+    goto never_exit
 )
 
-:: Frontend setup  
-echo.
-echo --- Setting up Frontend ---
-if exist frontend (
-    cd frontend
-    echo Current directory: %CD%
-    echo Installing frontend dependencies...
-    call npm install
-    echo Starting frontend server...
-    start "Frontend Server" cmd /k "npm run dev"
-    cd ..
-) else (
+if not exist "frontend" (
     echo [ERROR] Frontend folder not found!
-    goto error_handling
+    goto never_exit
+)
+
+echo [SUCCESS] Project structure OK
+echo.
+
+:: Git check - wrapped in error handling
+echo [4/8] Checking for updates...
+2>nul (
+  git --version >nul && (
+    if exist ".git" (
+        echo [INFO] Checking Git repository...
+        for /f "tokens=*" %%i in ('git branch --show-current 2^>nul') do set "branch=%%i"
+        if "!branch!"=="" set "branch=main"
+        echo [INFO] Branch: !branch!
+        
+        git fetch origin !branch! >nul 2>&1
+        git rev-list --count HEAD..origin/!branch! >nul 2>&1
+        if !errorlevel! equ 0 (
+            for /f "tokens=*" %%j in ('git rev-list --count HEAD..origin/!branch!') do set "commits=%%j"
+            if !commits! gtr 0 (
+                echo.
+                echo [UPDATE] !commits! new commits available!
+                choice /c yn /m "Update now (y/n)?"
+                if !errorlevel! equ 1 (
+                    echo [INFO] Updating...
+                    git pull origin !branch!
+                    echo [SUCCESS] Updated!
+                )
+            ) else (
+                echo [INFO] Already up to date
+            )
+        )
+    )
+  )
 )
 
 echo.
-echo --- Servers Starting ---
-echo Waiting for servers to start...
-timeout /t 10 /nobreak >nul
+echo [5/8] Starting Backend...
+cd backend
+echo [INFO] Backend dir: %CD%
 
-:: Open frontend in browser
-echo Opening frontend in browser...
-start http://localhost:3000
+:: Start backend with error handling
+echo [INFO] Installing dependencies...
+cmd /c "npm install" >nul 2>&1
+if exist "prisma" (
+    echo [INFO] Setting up database...
+    cmd /c "npx prisma generate" >nul 2>&1
+    cmd /c "npx prisma db push" >nul 2>&1
+)
+
+echo [INFO] Starting backend server...
+start "BACKEND SERVER" /B cmd /k "cd /d "%CD%" && echo === BACKEND SERVER === && echo Directory: %CD% && npm run dev"
+cd ..
+
+echo.
+echo [6/8] Starting Frontend...
+cd frontend
+echo [INFO] Frontend dir: %CD%
+
+:: Start frontend with error handling
+echo [INFO] Installing dependencies...
+cmd /c "npm install" >nul 2>&1
+
+echo [INFO] Starting frontend server...
+start "FRONTEND SERVER" /B cmd /k "cd /d "%CD%" && echo === FRONTEND SERVER === && echo Directory: %CD% && npm run dev"
+cd ..
+
+echo.
+echo [7/8] Finalizing...
+timeout /t 5 /nobreak >nul
+
+echo [INFO] Opening browser...
+start "" "http://localhost:3000" >nul 2>&1
 
 echo.
 echo ========================================
-echo        SERVERS STARTED SUCCESSFULLY
+echo          LAUNCH COMPLETE
 echo ========================================
-echo Backend:  http://localhost:4000
-echo Frontend: http://localhost:3000
+echo [SUCCESS] Backend:  http://localhost:4000
+echo [SUCCESS] Frontend: http://localhost:3000
 echo.
-echo Both servers are running in separate windows.
+echo [INFO] Two new windows should have opened for:
+echo        - Backend Server
+echo        - Frontend Server
 echo.
-echo Press any key to close this launcher...
-echo (Servers will continue running independently)
+echo [INFO] If no windows opened, check:
+echo        - Node.js is installed
+echo        - No port conflicts
+echo        - Check manual_start.bat
 echo.
 
-pause >nul
-exit /b
+:never_exit
+echo ========================================
+echo [INFO] This window will stay open.
+echo [INFO] Press CTRL+C to close manually.
+echo ========================================
 
-:error_handling
-echo.
-echo [ERROR] Failed to start application. Please check the errors above.
-echo.
-pause
+:: Infinite loop to prevent closing
+:infinite_loop
+timeout /t 9999 >nul
+goto infinite_loop
