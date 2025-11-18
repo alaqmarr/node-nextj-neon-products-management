@@ -18,6 +18,8 @@ export interface Task {
   type: TaskType;
   payload: any;
   status: TaskStatus;
+  result?: any;
+  entity?  : string;
   error?: string;
   createdAt: number;
 }

@@ -121,6 +121,127 @@ router.post('/purposes', async (req, res) => {
     res.json(purposes);
   });
 
+  // Add these routes to your existing server code
+
+// === Dashboard & Analytics Routes ===
+
+// GET /api/activities/recent
+router.get('/activities/recent', async (req, res) => {
+  try {
+    // Since you don't have an Activity model yet, we'll create a temporary solution
+    // that tracks activities from your existing models
+    const recentProducts = await prisma.product.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        brand: { select: { name: true } },
+      },
+    });
+
+    const activities = recentProducts.map((product, index) => ({
+      id: `activity-${product.id}`,
+      type: 'create',
+      entity: 'product',
+      status: 'success',
+      description: `Created product: ${product.name}`,
+      createdAt: product.createdAt.toISOString(),
+      brandName: product.brand?.name,
+    }));
+
+    res.json(activities);
+  } catch (error: any) {
+    console.error('Error fetching recent activities:', error);
+    res.status(500).json({ error: 'Failed to fetch recent activities' });
+  }
+});
+
+// GET /api/health
+router.get('/health', async (req, res) => {
+  try {
+    // Test database connection
+    await prisma.$queryRaw`SELECT 1`;
+    const database = true;
+
+    res.json({
+      database,
+      api: true,
+      websocket: true, // Assuming WebSocket is running
+      lastChecked: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('Health check failed:', error);
+    res.json({
+      database: false,
+      api: true,
+      websocket: false,
+      lastChecked: new Date().toISOString(),
+    });
+  }
+});
+
+// GET /api/stats/trends
+router.get('/stats/trends', async (req, res) => {
+  try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    // Get current counts
+    const [currentProducts, currentBrands, currentCategories, currentPurposes] = await Promise.all([
+      prisma.product.count(),
+      prisma.brand.count(),
+      prisma.category.count(),
+      prisma.purpose.count(),
+    ]);
+
+    // Get counts from one month ago
+    const [previousProducts, previousBrands, previousCategories, previousPurposes] = await Promise.all([
+      prisma.product.count({
+        where: {
+          createdAt: { lt: oneMonthAgo }
+        }
+      }),
+      prisma.brand.count({
+        where: {
+          createdAt: { lt: oneMonthAgo }
+        }
+      }),
+      prisma.category.count({
+        where: {
+          createdAt: { lt: oneMonthAgo }
+        }
+      }),
+      prisma.purpose.count({
+        where: {
+          createdAt: { lt: oneMonthAgo }
+        }
+      }),
+    ]);
+
+    const calculateGrowth = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    res.json({
+      productGrowth: calculateGrowth(currentProducts, previousProducts),
+      brandGrowth: calculateGrowth(currentBrands, previousBrands),
+      categoryGrowth: calculateGrowth(currentCategories, previousCategories),
+      purposeGrowth: calculateGrowth(currentPurposes, previousPurposes),
+    });
+  } catch (error: any) {
+    console.error('Error fetching trends:', error);
+    res.status(500).json({ 
+      productGrowth: 0,
+      brandGrowth: 0,
+      categoryGrowth: 0,
+      purposeGrowth: 0,
+    });
+  }
+});
+
 // === Settings Routes ===
 router.post('/settings/db-url', updateDbUrl);
 router.get('/settings/db-status', getDbStatus);

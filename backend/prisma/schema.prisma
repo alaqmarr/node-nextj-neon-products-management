@@ -65,3 +65,13 @@ enum ProductStatus {
   DRAFT
   PUBLISHED
 }
+
+model Activity {
+  id          String   @id @default(cuid())
+  type        String   // create, update, delete
+  entity      String   // product, brand, category, purpose
+  status      String   // success, processing, error
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
