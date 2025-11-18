@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Brand {
+  id         String     @id
+  name       String     @unique
+  products   Product[]
+  categories Category[] // m-m relation
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Category {
+  id         String    @id
+  name       String    @unique
+  products   Product[]
+  purposes   Purpose[] // m-m relation
+  brands     Brand[]   // <-- Added this to complete the m-m with Brand
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Purpose {
+  id         String     @id
+  name       String     @unique
+  products   Product[]
+  categories Category[] // m-m relation
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Product {
+  id         String        @id // also acts as slug
+  name       String        @unique
+  category   Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId String?
+  brand      Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  brandId    String?
+  purpose    Purpose?      @relation(fields: [purposeId], references: [id], onDelete: SetNull)
+  purposeId  String?
+  images     Image[]
+  status     ProductStatus @default(DRAFT)
+  isArchived Boolean       @default(false)
+  priority   Int           @default(0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+model Image {
+  id        String   @id @default(cuid())
+  url       String
+  publicId  String
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String?
+  createdAt DateTime @default(now())
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+}
